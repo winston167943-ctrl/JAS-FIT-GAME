@@ -38,7 +38,22 @@ export type Pose =
 
 export type Expression = 'happy' | 'tired' | 'effort' | 'sleep' | 'sad' | 'wow';
 
-type Item = 'dumbbells' | 'cup' | 'phone' | 'food' | 'ball' | null;
+export type Item = 'dumbbells' | 'cup' | 'phone' | 'food' | 'ball' | null;
+
+/** What gameplay needs from a character — implemented by the procedural Chibi and by ModelAvatar. */
+export interface Avatar {
+  readonly root: THREE.Object3D;
+  pose: Pose;
+  expression: Expression;
+  action: number;
+  fat: number;
+  tone: number;
+  fatigue: number;
+  update(dt: number, speed: number): void;
+  hold(item: Item): void;
+  headWorld(out: THREE.Vector3): THREE.Vector3;
+  setOutfit(color: string): void;
+}
 
 const matCache = new Map<string, THREE.Material>();
 function mat(color: string, o: { rough?: number; metal?: number; clear?: number; sheen?: string; emissive?: number } = {}): THREE.Material {
@@ -93,7 +108,7 @@ interface Joints {
 }
 const ZERO: Joints = { bodyY: 0, lean: 0, sway: 0, twist: 0, spine: 0, head: 0, headY: 0, headZ: 0, shL: 0, shLz: 0.12, shR: 0, shRz: -0.12, elL: -0.15, elR: -0.15, lgL: 0, lgR: 0, lgLz: 0, lgRz: 0, knL: 0, knR: 0, rootRx: 0 };
 
-export class Chibi {
+export class Chibi implements Avatar {
   readonly root = new THREE.Group();
   /** Everything that tilts/rotates with the character (inside root, above the blob shadow). */
   readonly rig = new THREE.Group();

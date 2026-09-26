@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { el } from '../ui/ui';
 import type { Input } from '../core/input';
 import type { Audio } from '../core/audio';
-import type { Chibi } from '../characters/chibi';
+import type { Avatar } from '../characters/chibi';
 import type { GameState } from '../systems/state';
 import { trackPoint, TRACK } from '../world/layout';
 
@@ -10,7 +10,7 @@ export interface MgContext {
   host: HTMLElement;
   input: Input;
   audio: Audio;
-  chibi: Chibi;
+  chibi: Avatar;
   state: GameState;
   shake: (v: number) => void;
   sweat: (v: number) => void;

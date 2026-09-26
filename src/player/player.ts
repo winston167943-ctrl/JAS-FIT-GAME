@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Chibi, YASMIN, type Pose } from '../characters/chibi';
+import { Chibi, YASMIN, type Pose, type Avatar } from '../characters/chibi';
 import type { Input } from '../core/input';
 import type { CollisionWorld } from '../core/collision';
 import type { GameState, Activity } from '../systems/state';
@@ -52,8 +52,8 @@ class Sweat {
 }
 
 export class Player {
-  readonly chibi = new Chibi(YASMIN);
-  readonly pos: THREE.Vector3;
+  chibi: Avatar = new Chibi(YASMIN);
+  readonly pos = new THREE.Vector3();
   yaw = 0;
   speed = 0;
   vy = 0;
@@ -69,14 +69,30 @@ export class Player {
 
   constructor(scene: THREE.Scene) {
     scene.add(this.chibi.root);
-    this.pos = this.chibi.root.position;
     this.sweat = new Sweat(scene);
   }
 
   place(x: number, z: number, face: number): void {
     this.pos.set(x, 0, z);
     this.yaw = face;
-    this.chibi.root.rotation.y = face;
+    this.sync();
+  }
+
+  /** Swap in a different character (e.g. the real rigged model once it has loaded). */
+  setAvatar(a: Avatar, scene: THREE.Scene): void {
+    const old = this.chibi;
+    a.fat = old.fat; a.tone = old.tone;
+    old.root.removeFromParent();
+    this.chibi = a;
+    scene.add(a.root);
+    this.sync();
+  }
+
+  private sync(): void {
+    const r = this.chibi.root;
+    if (r.parent && r.parent.type !== 'Scene') return; // seated in a car
+    r.position.copy(this.pos);
+    r.rotation.y = this.yaw;
   }
 
   /** Returns the distance travelled this frame. */
@@ -158,6 +174,7 @@ export class Player {
     if (this.activity === 'run') sweatRate = 4 + state.fatN * 26 + staminaF * 12;
     if (this.exhausted > 0) sweatRate += 18;
     sweatRate += this.sweatBoost;
+    this.sync();
     this.chibi.headWorld(this.headPos);
     this.sweat.update(dt, sweatRate, this.headPos);
     c.update(dt, this.speed);

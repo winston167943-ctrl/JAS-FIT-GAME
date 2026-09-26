@@ -15,6 +15,7 @@ import { Player } from './player/player';
 import { CameraRig } from './player/camera';
 import { Car, Traffic } from './vehicles/car';
 import { Npc, NPCS } from './characters/npcs';
+import { ModelAvatar } from './characters/model';
 import { UI, TouchControls, el, type MenuItem } from './ui/ui';
 import { Phone, type Quality } from './phone/phone';
 import { GameState, OUTFITS, wipe, clamp } from './systems/state';
@@ -166,6 +167,12 @@ export class Game {
     this.rig.dist = 6.5;
 
     this.applyQuality(this.quality, true);
+    // If a real rigged model of Yasmin is present, swap it in for the procedural one.
+    void ModelAvatar.load().then((m) => {
+      if (!m) return;
+      this.player.setAvatar(m, this.scene);
+      console.info('JAS FIT: loaded rigged Yasmin model');
+    }).catch((e) => console.warn('Model load failed, keeping procedural Yasmin', e));
     this.ui.renderQuests(this.state);
     this.ui.setVisible(false);
     this.touch?.setVisible(false);
@@ -310,7 +317,7 @@ export class Game {
     this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position);
     this.audio.night = this.sky.glow > 0.6;
     Car.setNight(this.sky.glow);
-    this.scene.environmentIntensity = 0.18 + (1 - this.sky.glow) * 0.22;
+    this.scene.environmentIntensity = 0.03 + (1 - this.sky.glow) * 0.37;
     this.renderer.toneMappingExposure = 0.85 + this.sky.glow * 0.2;
     if (this.bloom) {
       this.bloom.strength = 0.12 + this.sky.glow * 0.7;
