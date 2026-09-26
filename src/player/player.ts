@@ -4,7 +4,7 @@ import type { Input } from '../core/input';
 import type { CollisionWorld } from '../core/collision';
 import type { GameState, Activity } from '../systems/state';
 import type { Audio } from '../core/audio';
-import { SEA_X } from '../world/layout';
+import { inSea, terrainY } from '../world/layout';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -114,7 +114,7 @@ export class Player {
       const mag = Math.min(1, dir.length());
       if (this.exhausted > 0) this.exhausted -= dt;
       const wantsRun = input.sprint() && st.stamina > 1 && this.exhausted <= 0 && mag > 0.2;
-      this.swimming = this.pos.x > SEA_X + 2.2;
+      this.swimming = inSea(this.pos.x, this.pos.z);
       const walkSpeed = this.swimming ? 1.9 : 3.3, runSpeed = this.swimming ? 3.6 : 7.2;
       const target = mag * (wantsRun ? runSpeed : walkSpeed) * state.speedMul;
       this.speed = THREE.MathUtils.damp(this.speed, target, 8, dt);
@@ -145,10 +145,13 @@ export class Player {
         this.grounded = false;
         audio.play('whoosh');
       }
+      col.resolve(this.pos, 0.42);
+      const ground = this.swimming ? 0 : terrainY(this.pos.x, this.pos.z);
       this.vy -= 16 * dt;
       this.pos.y += this.vy * dt;
-      if (this.pos.y <= 0) { this.pos.y = 0; this.vy = 0; this.grounded = true; }
-      col.resolve(this.pos, 0.42);
+      if (this.pos.y <= ground) { this.pos.y = ground; this.vy = 0; this.grounded = true; }
+      else if (this.grounded && this.pos.y - ground < 0.5) { this.pos.y = ground; this.vy = 0; }
+      else this.grounded = false;
       this.chibi.root.rotation.y = this.yaw;
 
       const running = wantsRun && this.speed > 4;

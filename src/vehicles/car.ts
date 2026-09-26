@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { Input } from '../core/input';
 import type { CollisionWorld } from '../core/collision';
-import { RING } from '../world/layout';
+import { RING, terrainY } from '../world/layout';
 import { blobTexture } from '../core/textures';
 
 const glowMats: THREE.MeshStandardMaterial[] = [];
@@ -125,6 +125,7 @@ export class Car {
     }
     p.x += (front.x - fb.x + back.x - bb.x) / 2;
     p.z += (front.z - fb.z + back.z - bb.z) / 2;
+    p.y = THREE.MathUtils.damp(p.y, terrainY(p.x, p.z), 12, dt);
     if (hit && Math.abs(this.speed) > 2) this.speed *= -0.25;
     else if (hit) this.speed *= 0.5;
     this.animate(dt);
@@ -138,25 +139,29 @@ export class Car {
 }
 
 /** Traffic cars circulating on the ring road. They brake for anything in front of them. */
+type Loop = { x0: number; x1: number; z0: number; z1: number };
+
+/** Traffic cars circulating on road loops. They brake for anything in front of them. */
 export class Traffic {
-  readonly cars: { car: Car; s: number; lane: number; speed: number; dir: number }[] = [];
-  private perim: number;
-  constructor(scene: THREE.Scene) {
-    const w = RING.x1 - RING.x0, d = RING.z1 - RING.z0;
-    this.perim = 2 * (w + d);
-    const colors = ['#8fd3ff', '#ffd166', '#b5e48c', '#ffffff', '#c792ea', '#ff9f68'];
-    for (let i = 0; i < 6; i++) {
-      const car = new Car(colors[i], false);
-      scene.add(car.group);
-      this.cars.push({ car, s: (i / 6) * this.perim, lane: i % 2 ? 2.2 : -2.2, speed: 9, dir: i % 2 ? 1 : -1 });
+  readonly cars: { car: Car; s: number; lane: number; speed: number; dir: number; loop: Loop; perim: number }[] = [];
+  constructor(scene: THREE.Scene, loops: { loop: Loop; count: number }[] = [{ loop: RING, count: 6 }]) {
+    const colors = ['#8fd3ff', '#ffd166', '#b5e48c', '#ffffff', '#c792ea', '#ff9f68', '#ff6b6b', '#2d2d3a', '#f7c9d4'];
+    let ci = 0;
+    for (const { loop, count } of loops) {
+      const perim = 2 * ((loop.x1 - loop.x0) + (loop.z1 - loop.z0));
+      for (let i = 0; i < count; i++) {
+        const car = new Car(colors[ci++ % colors.length], false);
+        scene.add(car.group);
+        this.cars.push({ car, s: (i / count) * perim, lane: i % 2 ? 2.2 : -2.2, speed: 9, dir: i % 2 ? 1 : -1, loop, perim });
+      }
     }
   }
 
   /** Point on the lane path at arc length s. lane>0 = outer lane. */
-  private at(s: number, lane: number): { x: number; z: number; yaw: number } {
-    const { x0, x1, z0, z1 } = RING;
+  private at(L: Loop, perim: number, s: number, lane: number): { x: number; z: number; yaw: number } {
+    const { x0, x1, z0, z1 } = L;
     const w = x1 - x0, d = z1 - z0;
-    s = ((s % this.perim) + this.perim) % this.perim;
+    s = ((s % perim) + perim) % perim;
     if (s < w) return { x: x0 + s, z: z0 - lane, yaw: Math.PI / 2 };
     s -= w;
     if (s < d) return { x: x1 + lane, z: z0 + s, yaw: 0 };
@@ -168,13 +173,13 @@ export class Traffic {
 
   update(dt: number, blockers: THREE.Vector3[]): void {
     for (const t of this.cars) {
-      const ahead = this.at(t.s + t.dir * 6, t.lane);
+      const ahead = this.at(t.loop, t.perim, t.s + t.dir * 6, t.lane);
       let blocked = false;
       for (const b of blockers) if (Math.hypot(b.x - ahead.x, b.z - ahead.z) < 4.5) blocked = true;
       for (const o of this.cars) if (o !== t && Math.hypot(o.car.pos.x - ahead.x, o.car.pos.z - ahead.z) < 3.5) blocked = true;
       t.speed = THREE.MathUtils.damp(t.speed, blocked ? 0 : 9, blocked ? 6 : 1.5, dt);
       t.s += t.dir * t.speed * dt;
-      const p = this.at(t.s, t.lane);
+      const p = this.at(t.loop, t.perim, t.s, t.lane);
       t.car.pos.set(p.x, 0, p.z);
       const yaw = t.dir > 0 ? p.yaw : p.yaw + Math.PI;
       let dy = yaw - t.car.yaw;

@@ -10,6 +10,7 @@ export class Audio {
   private musicTimer: number | null = null;
   private ambTimer: number | null = null;
   muted = false;
+  private rainNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   track = -1;
   night = false;
 
@@ -103,6 +104,20 @@ export class Audio {
     const s = Math.abs(speed);
     this.engine.osc.frequency.setTargetAtTime(45 + s * 5, c.currentTime, 0.08);
     this.engine.gain.gain.setTargetAtTime(0.04 + Math.min(s, 20) * 0.003, c.currentTime, 0.1);
+  }
+
+  /** Continuous rain hiss, 0..1. */
+  setRain(v: number): void {
+    const c = this.ctx; if (!c) return;
+    if (v < 0.02) { if (this.rainNode) this.rainNode.gain.gain.setTargetAtTime(0, c.currentTime, 0.5); return; }
+    if (!this.rainNode) {
+      const src = c.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+      const gain = c.createGain(); gain.gain.value = 0;
+      src.connect(f).connect(gain).connect(this.master); src.start();
+      this.rainNode = { src, gain };
+    }
+    this.rainNode.gain.gain.setTargetAtTime(v * 0.12, c.currentTime, 0.5);
   }
 
   /** Birds by day, crickets by night. */

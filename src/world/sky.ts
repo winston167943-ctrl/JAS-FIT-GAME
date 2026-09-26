@@ -36,6 +36,7 @@ export class Sky {
   /** 0 by day, 1 at full night — drives windows, street lamps and bloom. */
   glow = 0;
   /** Current horizon color (reflected by water). */
+  get sunDirection(): THREE.Vector3 { return this.sunDir; }
   get horizon(): THREE.Color { return this.uniforms.horizon.value as THREE.Color; }
   private sunDir = new THREE.Vector3();
   private fogColor = new THREE.Color();

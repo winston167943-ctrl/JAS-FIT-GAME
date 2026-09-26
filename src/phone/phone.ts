@@ -3,7 +3,8 @@ import type { GameState } from '../systems/state';
 import { QUESTS, OUTFITS } from '../systems/state';
 import { FOODS, MENUS } from '../systems/foods';
 import { Audio } from '../core/audio';
-import { PLACES, RING, HOUSE, GYM, CAFE, TRACK, POND, BEACH_X, SEA_X } from '../world/layout';
+import { PLACES, EXT } from '../world/layout';
+import { drawWorld } from '../ui/minimap';
 import heroUrl from '../assets/yasmin-hero.jpg';
 import logoUrl from '../assets/jas-logo.png';
 import { APP_URL } from '../config';
@@ -191,7 +192,7 @@ export class Phone {
       case 'map': {
         const { b } = this.view('מפה');
         const c = el('canvas', 'map-canvas') as HTMLCanvasElement;
-        c.width = 640; c.height = 560;
+        c.width = 640; c.height = 610;
         b.append(c);
         this.drawMap(c);
         for (const p of PLACES) {
@@ -299,26 +300,11 @@ export class Phone {
 
   private drawMap(c: HTMLCanvasElement): void {
     const g = c.getContext('2d')!;
-    const minX = -85, maxX = 95, minZ = -78, maxZ = 78;
+    const minX = EXT.x0 - 8, maxX = EXT.x1 + 8, minZ = EXT.z0 - 8, maxZ = EXT.z1 + 8;
     const sx = (x: number) => ((x - minX) / (maxX - minX)) * c.width;
     const sz = (z: number) => ((z - minZ) / (maxZ - minZ)) * c.height;
-    const rect = (x0: number, z0: number, x1: number, z1: number, col: string, r = 0) => { g.fillStyle = col; g.beginPath(); g.roundRect(sx(x0), sz(z0), sx(x1) - sx(x0), sz(z1) - sz(z0), r); g.fill(); };
-    g.fillStyle = '#9fd67f'; g.fillRect(0, 0, c.width, c.height);
-    rect(BEACH_X - 6, minZ, maxX, maxZ, '#f3dca8');
-    rect(SEA_X, minZ, maxX, maxZ, '#56b7e0');
-    const w = RING.w;
-    g.strokeStyle = '#4a4d57'; g.lineWidth = (w / (maxX - minX)) * c.width;
-    g.strokeRect(sx(RING.x0), sz(RING.z0), sx(RING.x1) - sx(RING.x0), sz(RING.z1) - sz(RING.z0));
-    g.beginPath(); g.moveTo(sx(RING.x0), sz(0)); g.lineTo(sx(RING.x1), sz(0)); g.stroke();
-    rect(HOUSE.x0, HOUSE.z0, HOUSE.x1, HOUSE.z1, '#f7c9a8', 6);
-    rect(GYM.x0, GYM.z0, GYM.x1, GYM.z1, '#4a4856', 6);
-    rect(CAFE.x - CAFE.w / 2, CAFE.z - CAFE.d / 2, CAFE.x + CAFE.w / 2, CAFE.z + CAFE.d / 2, '#f7a8c0', 6);
-    rect(-8, -38, 8, -14, '#e98a4f', 4);
-    g.strokeStyle = '#d66a4e'; g.lineWidth = 7;
-    g.beginPath(); g.ellipse(sx(TRACK.x), sz(TRACK.z), (TRACK.rx - 1.8) / (maxX - minX) * c.width, (TRACK.rz - 1.8) / (maxZ - minZ) * c.height, 0, 0, Math.PI * 2); g.stroke();
-    g.fillStyle = '#56b7e0';
-    g.beginPath(); g.ellipse(sx(POND.x), sz(POND.z), POND.rx / (maxX - minX) * c.width, POND.rz / (maxZ - minZ) * c.height, 0, 0, Math.PI * 2); g.fill();
-    g.font = '26px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    drawWorld(g, sx, sz, c.width / (maxX - minX), c.width, c.height);
+    g.font = '22px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const p of PLACES) {
       g.fillStyle = 'rgba(255,255,255,.9)';
       g.beginPath(); g.arc(sx(p.x), sz(p.z), 20, 0, Math.PI * 2); g.fill();

@@ -4,14 +4,15 @@ import { StaticBatcher, makeGlowMaterial, type Bucket } from '../core/batch';
 import { CollisionWorld } from '../core/collision';
 import { canvasTexture, textTexture, blobTexture } from '../core/textures';
 import { makeWaterMaterial } from './water';
-import { RING, HOUSE, GYM, CAFE, TRACK, POND, BEACH_X, SEA_X } from './layout';
+import { RING, HOUSE, GYM, CAFE, TRACK, POND, BEACH_X, SEA_X, EXT, HILL, terrainY } from './layout';
+import { buildDistricts, type DistrictRuntime } from './districts';
 import heroUrl from '../assets/yasmin-hero.jpg';
 import logoUrl from '../assets/jas-logo.png';
 
 export type SpotId =
   | 'fridge' | 'water_home' | 'bed' | 'mirror' | 'sofa'
   | 'dumbbells' | 'band' | 'treadmill' | 'water_gym'
-  | 'track' | 'cafe' | 'foodtruck' | 'bench' | 'swim' | 'lounger' | 'hoop';
+  | 'track' | 'cafe' | 'foodtruck' | 'bench' | 'swim' | 'lounger' | 'hoop' | 'plaza' | 'lookout';
 
 export interface Spot {
   id: SpotId;
@@ -55,10 +56,13 @@ export class World {
   readonly col = new CollisionWorld();
   readonly spots: Spot[] = [];
   readonly lamps: THREE.Vector3[] = [];
-  private b = new StaticBatcher();
+  readonly b = new StaticBatcher();
+  /** Tall solid volumes the camera must not pass through. */
+  readonly occluders: { x0: number; x1: number; z0: number; z1: number; h: number }[] = [];
+  private districts!: DistrictRuntime;
   private glowMat = makeGlowMaterial();
   private neonMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xff5fa2, emissiveIntensity: 2.2 });
-  private waters: THREE.ShaderMaterial[] = [];
+  readonly waters: THREE.ShaderMaterial[] = [];
   private buildings: Building[] = [];
   private ducks: THREE.Group[] = [];
   private fountain!: THREE.Points;
@@ -82,6 +86,8 @@ export class World {
     this.buildBeach();
     this.buildNeighborhood();
     this.buildNature();
+    this.districts = buildDistricts(this, scene);
+    this.col.bounds = { x0: EXT.x0, x1: EXT.x1, z0: EXT.z0, z1: EXT.z1 };
     this.b.build(this.group, this.glowMat);
     for (let i = 0; i < pointLights; i++) {
       const l = new THREE.PointLight(0xffc98a, 0, 18, 1.6);
@@ -91,23 +97,23 @@ export class World {
   }
 
   // ---------- helpers ----------
-  private box(x: number, y: number, z: number, w: number, h: number, d: number, color: string, o: { r?: number; rotY?: number; bucket?: Bucket } = {}): void {
+  box(x: number, y: number, z: number, w: number, h: number, d: number, color: string, o: { r?: number; rotY?: number; bucket?: Bucket } = {}): void {
     const geo = o.r ? rounded(w, h, d, o.r) : box1;
     this.b.add(geo, color, { x, y: y + h / 2, z }, { rot: { x: 0, y: o.rotY ?? 0, z: 0 }, scale: o.r ? 1 : { x: w, y: h, z: d }, bucket: o.bucket });
   }
-  private cyl(x: number, y: number, z: number, r: number, h: number, color: string, bucket?: Bucket, rot?: THREE.Vector3Like): void {
+  cyl(x: number, y: number, z: number, r: number, h: number, color: string, bucket?: Bucket, rot?: THREE.Vector3Like): void {
     this.b.add(cyl1, color, { x, y: y + h / 2, z }, { scale: { x: r * 2, y: h, z: r * 2 }, bucket, rot });
   }
-  private sph(x: number, y: number, z: number, r: number, color: string, sy = 1, bucket?: Bucket, lo = false): void {
+  sph(x: number, y: number, z: number, r: number, color: string, sy = 1, bucket?: Bucket, lo = false): void {
     this.b.add(lo ? sphLo : sph1, color, { x, y, z }, { scale: { x: r * 2, y: r * 2 * sy, z: r * 2 }, bucket });
   }
-  private cone(x: number, y: number, z: number, r: number, h: number, color: string, rotY = 0, segGeo?: THREE.BufferGeometry): void {
+  cone(x: number, y: number, z: number, r: number, h: number, color: string, rotY = 0, segGeo?: THREE.BufferGeometry): void {
     this.b.add(segGeo ?? cone1, color, { x, y: y + h / 2, z }, { scale: { x: r * 2, y: h, z: r * 2 }, rot: { x: 0, y: rotY, z: 0 } });
   }
-  private spot(id: SpotId, x: number, z: number, stand: { x: number; z: number; face: number }, r = 1.6): void {
+  spot(id: SpotId, x: number, z: number, stand: { x: number; z: number; face: number }, r = 1.6): void {
     this.spots.push({ id, x, z, r, stand });
   }
-  private lamp(x: number, z: number, rotY = 0): void {
+  lamp(x: number, z: number, rotY = 0): void {
     this.cyl(x, 0, z, 0.09, 4.2, '#2f3340');
     this.cyl(x, 0, z, 0.2, 0.3, '#2f3340');
     const ax = Math.sin(rotY) * 0.6, az = Math.cos(rotY) * 0.6;
@@ -117,21 +123,21 @@ export class World {
     this.lamps.push(new THREE.Vector3(x + ax, 3.6, z + az));
     this.col.circle(x, z, 0.2);
   }
-  private tree(x: number, z: number, s = 1, kind: 'round' | 'pine' | 'blossom' = 'round', collide = true): void {
+  tree(x: number, z: number, s = 1, kind: 'round' | 'pine' | 'blossom' = 'round', collide = true, y0 = 0): void {
     const greens = ['#5eaa4c', '#6dbb52', '#4f9c46', '#7cc35d'];
     const c = kind === 'blossom' ? ['#f6a8c4', '#f8bcd2', '#f292b4'][Math.floor(Math.random() * 3)] : greens[Math.floor(Math.random() * greens.length)];
-    this.cyl(x, 0, z, 0.18 * s, 1.6 * s, P.trunk);
+    this.cyl(x, y0 - 0.3, z, 0.18 * s, 1.9 * s, P.trunk);
     if (kind === 'pine') {
-      for (let i = 0; i < 3; i++) this.cone(x, (1.2 + i * 0.9) * s, z, (1.4 - i * 0.35) * s, 1.6 * s, '#3f8a4a');
+      for (let i = 0; i < 3; i++) this.cone(x, y0 + (1.2 + i * 0.9) * s, z, (1.4 - i * 0.35) * s, 1.6 * s, '#3f8a4a');
     } else {
-      this.sph(x, 2.4 * s, z, 1.25 * s, c, 0.9, 'solid', true);
-      this.sph(x + 0.7 * s, 2.0 * s, z + 0.3 * s, 0.85 * s, c, 0.9, 'solid', true);
-      this.sph(x - 0.6 * s, 2.1 * s, z - 0.3 * s, 0.9 * s, c, 0.9, 'solid', true);
-      this.sph(x + 0.1 * s, 3.1 * s, z - 0.1 * s, 0.8 * s, c, 0.9, 'solid', true);
+      this.sph(x, y0 + 2.4 * s, z, 1.25 * s, c, 0.9, 'solid', true);
+      this.sph(x + 0.7 * s, y0 + 2.0 * s, z + 0.3 * s, 0.85 * s, c, 0.9, 'solid', true);
+      this.sph(x - 0.6 * s, y0 + 2.1 * s, z - 0.3 * s, 0.9 * s, c, 0.9, 'solid', true);
+      this.sph(x + 0.1 * s, y0 + 3.1 * s, z - 0.1 * s, 0.8 * s, c, 0.9, 'solid', true);
     }
     if (collide) this.col.circle(x, z, 0.35 * s);
   }
-  private palm(x: number, z: number, s = 1): void {
+  palm(x: number, z: number, s = 1): void {
     let px = x, py = 0;
     const lean = (Math.random() - 0.5) * 0.5;
     for (let i = 0; i < 7; i++) {
@@ -146,7 +152,7 @@ export class World {
     this.sph(px, py, z, 0.35 * s, '#6b4a2e');
     this.col.circle(x, z, 0.3);
   }
-  private bush(x: number, z: number, s = 1, flowers = true): void {
+  bush(x: number, z: number, s = 1, flowers = true): void {
     const c = ['#5aa84a', '#66b453', '#4d9a45'][Math.floor(Math.random() * 3)];
     this.sph(x, 0.45 * s, z, 0.6 * s, c, 0.85, 'solid', true);
     this.sph(x + 0.45 * s, 0.35 * s, z + 0.2 * s, 0.45 * s, c, 0.85, 'solid', true);
@@ -156,7 +162,7 @@ export class World {
       for (let i = 0; i < 5; i++) this.sph(x + (Math.random() - 0.5) * 1.1 * s, (0.6 + Math.random() * 0.35) * s, z + (Math.random() - 0.5) * 0.9 * s, 0.09 * s, fc, 1, 'solid', true);
     }
   }
-  private flowerBed(x: number, z: number, w: number, d: number): void {
+  flowerBed(x: number, z: number, w: number, d: number): void {
     this.box(x, 0, z, w, 0.25, d, '#8a5a3b', { r: 0.08 });
     this.box(x, 0.2, z, w - 0.2, 0.08, d - 0.2, '#5b3a26');
     const cols = ['#ff8fb1', '#ffd166', '#ffffff', '#c792ea', '#ff6b6b', '#ff9f68'];
@@ -168,7 +174,7 @@ export class World {
     }
     this.col.box(x, z, w, d);
   }
-  private bench(x: number, z: number, rotY: number): void {
+  bench(x: number, z: number, rotY: number): void {
     const c = Math.cos(rotY), s = Math.sin(rotY);
     const at = (lx: number, lz: number) => ({ x: x + lx * c + lz * s, z: z - lx * s + lz * c });
     for (let i = 0; i < 3; i++) { const p = at(0, -0.2 + i * 0.2); this.box(p.x, 0.45, p.z, 1.8, 0.07, 0.16, P.wood, { rotY }); }
@@ -176,7 +182,7 @@ export class World {
     for (const lx of [-0.75, 0.75]) { const p = at(lx, 0); this.box(p.x, 0, p.z, 0.08, 0.45, 0.6, '#3a3d48', { rotY }); }
     this.col.box(x, z, Math.abs(1.9 * c) + Math.abs(0.7 * s), Math.abs(1.9 * s) + Math.abs(0.7 * c));
   }
-  private umbrellaTable(x: number, z: number, color: string): void {
+  umbrellaTable(x: number, z: number, color: string): void {
     this.cyl(x, 0, z, 0.55, 0.06, P.white);
     this.cyl(x, 0.72, z, 0.6, 0.05, P.white);
     this.cyl(x, 0, z, 0.05, 2.5, '#d9d4cc');
@@ -203,7 +209,7 @@ export class World {
 
   // ---------- ground & roads ----------
   private buildGround(): void {
-    const size = 900, seg = 140;
+    const size = 1100, seg = 240;
     const g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
@@ -214,9 +220,24 @@ export class World {
       const x = pos.getX(i), z = pos.getZ(i);
       const n = Math.sin(x * 0.08) * Math.cos(z * 0.07) + Math.sin(x * 0.21 + z * 0.13) * 0.5;
       tmp.copy(c1).lerp(n > 0 ? c2 : c3, Math.min(1, Math.abs(n) * 0.6));
-      const r = Math.hypot(x, z * 1.1);
-      let y = 0;
-      if (r > 105 && x < BEACH_X - 6) y = Math.pow((r - 105) / 60, 2) * 8 * (0.6 + 0.4 * Math.sin(x * 0.03 + z * 0.05));
+      // Outside the playable area the land rolls up into hills.
+      const ox = Math.max(0, EXT.x0 + 6 - x), oz = Math.max(0, EXT.z0 + 6 - z, z - EXT.z1 + 6);
+      const out = Math.hypot(ox, oz);
+      let y = terrainY(x, z);
+      if (out > 0 && x < BEACH_X - 6) y += Math.pow(out / 45, 2) * 10 * (0.6 + 0.4 * Math.sin(x * 0.03 + z * 0.05));
+      // Hill trail: a dirt path spiralling to the lookout
+      const hd = Math.hypot(x - HILL.x, (z - HILL.z) * 1.1);
+      if (hd < HILL.r + 2) {
+        const ang = Math.atan2(z - HILL.z, x - HILL.x);
+        for (let k = -1; k <= 2; k++) {
+          const tt = ((ang + Math.PI) / (Math.PI * 2) + k) / 2.2;
+          if (tt < 0 || tt > 1) continue;
+          const pr = HILL.r - 2 - tt * (HILL.r - 6);
+          if (Math.abs(hd - pr) < 1.6) tmp.set('#c9a878');
+        }
+        if (hd < 7) tmp.set('#d9c29a');
+        else if (tmp.getHex() !== new THREE.Color('#c9a878').getHex()) tmp.lerp(new THREE.Color('#6fb84f'), 0.3);
+      }
       if (x > BEACH_X - 6) { tmp.copy(sand); y = x > SEA_X + 4 ? -2 - (x - SEA_X) * 0.05 : 0; }
       pos.setY(i, y);
       cols[i * 3] = tmp.r; cols[i * 3 + 1] = tmp.g; cols[i * 3 + 2] = tmp.b;
@@ -873,17 +894,16 @@ export class World {
       this.col.box(x, z, ww, dd);
       this.bush(x + fx * (off + 1.2) + px * 3, z + fz * (off + 1.2) + pz * 3, 0.7);
     };
-    for (let x = -52; x <= 52; x += 13) { house(x, -66, 0); house(x, 66, Math.PI); }
-    for (let z = -40; z <= 40; z += 13) house(-76, z, Math.PI / 2);
+    for (let x = -52; x <= 52; x += 13) { if (Math.abs(x) > 6) house(x, -66, 0); house(x, 66, Math.PI); }
+    for (let z = -40; z <= 40; z += 13) if (Math.abs(z) > 8) house(-76, z, Math.PI / 2);
   }
 
   private buildNature(): void {
     // Forest ring beyond the neighborhood
-    for (let i = 0; i < 150; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 84 + Math.random() * 40;
-      const tx = Math.cos(a) * r * 1.1, tz = Math.sin(a) * r;
-      if (tx > BEACH_X - 10) continue;
+    for (let i = 0; i < 420; i++) {
+      const tx = EXT.x0 - 30 + Math.random() * (BEACH_X - 10 - EXT.x0 + 30), tz = EXT.z0 - 40 + Math.random() * (EXT.z1 - EXT.z0 + 80);
+      const inside = tx > EXT.x0 + 4 && tz > EXT.z0 + 4 && tz < EXT.z1 - 4;
+      if (inside) continue;
       this.tree(tx, tz, 1.1 + Math.random() * 0.8, Math.random() < 0.35 ? 'pine' : 'round', false);
     }
     // Trees in the empty lots
@@ -916,6 +936,7 @@ export class World {
     this.time += dt;
     for (const w of this.waters) { w.uniforms.uTime.value = this.time; w.uniforms.uNight.value = glow; if (skyColor) w.uniforms.uSky.value.copy(skyColor); }
     this.glowMat.emissive.setScalar(0.08 + glow * 2.4);
+    this.districts.update(dt, glow, this.time);
     // Fountain particles
     const seeds = this.fountain.userData.seeds as number[][];
     const arr = this.fountain.geometry.attributes.position.array as Float32Array;

@@ -18,6 +18,7 @@ export class CameraRig {
   mode: CamMode = { kind: 'follow' };
   /** Touch players can't easily steer the camera while moving, so it follows more eagerly. */
   touch = false;
+  occluders: { x0: number; x1: number; z0: number; z1: number; h: number }[] = [];
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
@@ -95,6 +96,19 @@ export class CameraRig {
       Math.max(0.6, this.target.y + Math.sin(this.pitch) * d),
       this.target.z + Math.cos(this.yaw) * cp * d,
     );
+    // Pull the camera in front of any building between it and Yasmin.
+    if (this.occluders.length) {
+      const steps = 24;
+      for (let i = 1; i <= steps; i++) {
+        const k = i / steps;
+        const x = this.target.x + (want.x - this.target.x) * k, y = this.target.y + (want.y - this.target.y) * k, z = this.target.z + (want.z - this.target.z) * k;
+        if (this.occluders.some((o) => x > o.x0 - 0.6 && x < o.x1 + 0.6 && z > o.z0 - 0.6 && z < o.z1 + 0.6 && y < o.h + 0.5)) {
+          const kk = Math.max(0.15, (i - 1) / steps);
+          want.set(this.target.x + (want.x - this.target.x) * kk, this.target.y + (want.y - this.target.y) * kk, this.target.z + (want.z - this.target.z) * kk);
+          break;
+        }
+      }
+    }
     this.cam.position.lerp(want, k);
     this.look.lerp(this.target, k);
     this.cam.lookAt(this.look);

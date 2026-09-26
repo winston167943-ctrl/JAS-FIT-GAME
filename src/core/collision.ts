@@ -7,7 +7,7 @@ type Collider = Box | Circle;
 
 export class CollisionWorld {
   private colliders: Collider[] = [];
-  bounds = 95;
+  bounds = { x0: -95, x1: 95, z0: -95, z1: 95 };
 
   box(cx: number, cz: number, w: number, d: number): void {
     this.colliders.push({ kind: 'box', minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 });
@@ -54,10 +54,10 @@ export class CollisionWorld {
       }
     }
     const b = this.bounds;
-    if (p.x < -b || p.x > b || p.z < -b || p.z > b) {
+    if (p.x < b.x0 || p.x > b.x1 || p.z < b.z0 || p.z > b.z1) {
       hit = true;
-      p.x = Math.max(-b, Math.min(b, p.x));
-      p.z = Math.max(-b, Math.min(b, p.z));
+      p.x = Math.max(b.x0, Math.min(b.x1, p.x));
+      p.z = Math.max(b.z0, Math.min(b.z1, p.z));
     }
     return hit;
   }

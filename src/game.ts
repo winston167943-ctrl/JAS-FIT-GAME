@@ -19,6 +19,10 @@ import { ModelAvatar } from './characters/model';
 import { SpriteAvatar } from './characters/sprite';
 import { Spectacle } from './world/spectacle';
 import { MiniMap } from './ui/minimap';
+import { Crowd } from './characters/crowd';
+import { Grass } from './world/grass';
+import { Weather } from './world/weather';
+import { RING, DOWNTOWN } from './world/layout';
 import { UI, TouchControls, el, type MenuItem } from './ui/ui';
 import { Phone, type Quality } from './phone/phone';
 import { GameState, OUTFITS, wipe, clamp } from './systems/state';
@@ -61,6 +65,9 @@ export class Game {
   private phone: Phone;
   private fx: Sparkles;
   private spectacle: Spectacle;
+  private crowd: Crowd;
+  private grass: Grass;
+  private weather: Weather;
   private minimap!: MiniMap;
   private splashT = 0;
   private wasSwimming = false;
@@ -107,11 +114,15 @@ export class Game {
     this.player = new Player(this.scene);
     this.rig = new CameraRig(this.camera);
     this.rig.touch = matchMedia('(pointer: coarse)').matches;
+    this.rig.occluders = this.world.occluders;
     this.car = new Car('#f7c9d4', true);
     this.car.pos.set(-16, 0, -2.4);
     this.car.yaw = Math.PI / 2;
     this.scene.add(this.car.group);
-    this.traffic = new Traffic(this.scene);
+    this.traffic = new Traffic(this.scene, [{ loop: RING, count: 6 }, { loop: DOWNTOWN, count: 5 }]);
+    this.crowd = new Crowd(this.scene);
+    this.grass = new Grass(this.scene, 0);
+    this.weather = new Weather(this.scene);
     for (const d of NPCS) this.npcs.push(new Npc(d, this.scene));
     this.fx = new Sparkles(this.scene);
     this.spectacle = new Spectacle(this.scene);
@@ -167,6 +178,14 @@ export class Game {
     if (qp.has('nointro')) this.state.s.tutorial = true;
     this.skipIntro = qp.has('nointro');
     if (qp.has('debug')) (window as unknown as { game: Game }).game = this;
+
+    this.weather.onChange = (k) => {
+      if (this.mode === 'intro') return;
+      if (k === 'rain') this.ui.toast('🌧️ מתחיל לרדת גשם... אולי אימון בחדר הכושר?', 'info');
+      else if (k === 'cloudy') this.ui.toast('☁️ מתעננן', 'info');
+      else this.ui.toast('☀️ השמש חוזרת — חפשי קשת בענן! 🌈', 'good');
+    };
+    if (qp.has('weather')) this.weather.set(qp.get('weather') as 'rain');
 
     const outfit = OUTFITS.find((o) => o.id === this.state.s.outfit);
     if (outfit && outfit.id !== 'jas') this.player.chibi.setOutfit(outfit.color);
@@ -232,6 +251,8 @@ export class Game {
       this.sky.sun.shadow.map?.dispose();
       (this.sky.sun.shadow as { map: THREE.WebGLRenderTarget | null }).map = null;
     }
+    this.crowd.maxVisible = q === 'high' ? 22 : q === 'medium' ? 12 : 6;
+    this.grass.setCount(q === 'high' ? 26000 : q === 'medium' ? 11000 : 0);
     const lights = q === 'high' ? 4 : q === 'medium' ? 2 : 0;
     let i = 0;
     this.scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight) o.visible = i++ < lights; });
@@ -329,6 +350,14 @@ export class Game {
     const hour = this.state.hour;
     const focus = this.mode === 'drive' ? this.car.pos : this.player.pos;
     this.sky.update(hour, dt, focus, this.camera.position);
+    this.weather.update(dt, gm, hour, this.camera, this.sky.sunDirection);
+    const oc = this.weather.overcast;
+    this.sky.sun.intensity *= 1 - oc * 0.7;
+    this.sky.hemi.intensity *= 1 - oc * 0.25;
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.lerp(new THREE.Color(0x8a93a0).multiplyScalar(1 - this.sky.glow * 0.8), oc * 0.7);
+    fog.near = 120 - this.weather.rain * 80; fog.far = 420 - this.weather.rain * 250;
+    this.audio.setRain(this.weather.rain);
     this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position, this.sky.horizon);
     this.audio.night = this.sky.glow > 0.6;
     Car.setNight(this.sky.glow);
@@ -344,6 +373,8 @@ export class Game {
     const blockers = [this.player.pos, this.car.pos];
     this.traffic.update(dt, blockers);
     for (const n of this.npcs) n.update(dt, this.player.pos, this.elapsed);
+    this.crowd.update(dt, this.camera.position, this.player.pos, this.elapsed);
+    this.grass.update(dt, this.mode === 'drive' ? this.car.pos : this.player.pos, 1 + this.weather.rain * 1.5 + oc * 0.5);
     this.fx.update(dt);
     this.spectacle.update(dt, this.sky.glow, hour, this.player.pos, this.camera);
     const mp = this.mode === 'drive' ? this.car.pos : this.player.pos;
@@ -427,6 +458,7 @@ export class Game {
       dumbbells: ['🏋️‍♀️', 'אימון משקולות'], band: ['🎗️', 'אימון גומייה'], treadmill: ['🏃‍♀️', 'הליכון'],
       track: ['🏁', 'אתגר הקפות'], cafe: ['☕', 'להזמין בקפה'], foodtruck: ['🍔', 'משאית ג׳אנק'], bench: ['🪑', 'לנוח על הספסל'],
       swim: ['🌊', 'לשחות בים'], lounger: ['🏖️', 'להשתזף'], hoop: ['🏀', 'זריקות לסל'],
+      lookout: ['🔭', 'להסתכל על הנוף'], plaza: ['💃', 'לרקוד מול המסך הענק'],
     };
     const [icon, text] = map[s.id] ?? ['✋', 'פעולה'];
     return { icon, text };
@@ -532,6 +564,17 @@ export class Game {
         break;
       case 'lounger':
         this.busy({ ...s.stand }, 'lounge', 3.5, () => { st.energy = clamp(st.energy + 8); st.mood = clamp(st.mood + 12); st.hydration = clamp(st.hydration - 8); this.state.addMinutes(45); this.ui.toast('🏖️ שמש, ים, שקט. מצב רוח +12 (ותשתי מים!)', 'good'); });
+        break;
+      case 'lookout':
+        this.mode = 'busy';
+        this.lockAt(s.stand, 'wave', { dist: 60, height: 40, side: 0.2 });
+        this.busyTimer = 7;
+        this.busyDone = () => { st.mood = clamp(st.mood + 15); this.state.addMinutes(20); this.ui.toast('🔭 איזה נוף! כל העיר מתחתייך. מצב רוח +15', 'good'); this.unlock(); };
+        this.fx.burst(this.player.pos, ['#ffd166', '#ffffff'], 60);
+        break;
+      case 'plaza':
+        this.audio.playTrack(1);
+        this.busy(s.stand, 'dance', 6, () => { st.mood = clamp(st.mood + 12); st.energy = clamp(st.energy - 6); this.state.st.bodyFat = clamp(this.state.st.bodyFat - 0.6, 12, 95); this.ui.toast('💃 ריקוד מול יסמין הענקית! מצב רוח +12, שומן −0.6', 'good'); this.fx.burst(this.player.pos, ['#ff5fa2', '#ffd166', '#6fd3ff'], 90); });
         break;
       case 'swim':
         if (st.energy < 15) return tooTired();
@@ -777,6 +820,7 @@ export class Game {
     }
     const obstacles = this.traffic.cars.map((t) => t.car.pos);
     for (const n of this.npcs) obstacles.push(n.pos);
+    obstacles.push(...this.crowd.near(this.car.pos, 20));
     const hit = this.car.drive(dt, this.input, this.world.col, obstacles);
     if (hit) { this.audio.play('honk'); this.rig.addShake(0.4); }
     this.audio.setEngine(this.car.speed);
