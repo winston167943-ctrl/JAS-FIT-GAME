@@ -136,16 +136,18 @@ button { font-family: inherit; cursor: pointer; border: 0; color: inherit; }
 
 /* ---------------- Touch controls ---------------- */
 .touch { position: absolute; inset: 0; pointer-events: none; z-index: 12; }
-.joy { position: absolute; left: calc(26px + var(--safe-l)); bottom: calc(26px + var(--safe-b)); width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.45); pointer-events: auto; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); touch-action: none; }
-.joy i { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; background: rgba(255,250,244,.92); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
-.tbtns { position: absolute; right: calc(20px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); width: 190px; height: 190px; pointer-events: none; }
-.tbtn { position: absolute; width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: rgba(255,250,244,.9); box-shadow: 0 6px 16px rgba(0,0,0,.25); pointer-events: auto; touch-action: none; font-weight: 800; color: var(--brown); }
-.tbtn small { position: absolute; bottom: 6px; font-size: 9px; font-weight: 800; }
-.tbtn.act { right: 0; bottom: 0; width: 84px; height: 84px; background: linear-gradient(135deg, #7a3b36, #5a2f2d); color: #fff; font-size: 30px; }
-.tbtn.jump { right: 96px; bottom: 0; }
-.tbtn.run { right: 8px; bottom: 98px; }
-.tbtn.run.on { background: var(--gold-2); }
-.tbtn.car { right: 90px; bottom: 82px; width: 56px; height: 56px; font-size: 22px; }
+.joy-zone { position: absolute; left: 0; bottom: 0; width: 58%; height: 62%; pointer-events: auto; touch-action: none; }
+.joy { position: absolute; left: calc(84px + var(--safe-l)); top: calc(100% - 96px - var(--safe-b)); width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); transition: opacity .2s, border-color .15s; pointer-events: none; }
+.joy.idle { opacity: .55; }
+.joy.sprint { border-color: var(--gold-2); box-shadow: 0 0 0 4px rgba(243,207,133,.35); }
+.joy i { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: rgba(255,250,244,.95); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+.joy-hint { position: absolute; left: calc(16px + var(--safe-l)); bottom: calc(170px + var(--safe-b)); font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); transition: opacity .4s; pointer-events: none; max-width: 180px; }
+.tbtns { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(24px + var(--safe-b)); width: 170px; height: 170px; pointer-events: none; }
+.tbtn { position: absolute; width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: rgba(255,250,244,.92); box-shadow: 0 6px 16px rgba(0,0,0,.25); pointer-events: auto; touch-action: none; font-weight: 800; color: var(--brown); transition: transform .08s; }
+.tbtn.act { right: 0; bottom: 0; width: 88px; height: 88px; background: linear-gradient(135deg, #7a3b36, #5a2f2d); color: #fff; font-size: 34px; }
+.tbtn.jump { right: 100px; bottom: 4px; }
+.tbtn.car { right: 12px; bottom: 100px; }
+.tbtn.down { transform: scale(.88); }
 .tbtn:active { transform: scale(.92); }
 .tbtn.hidden { display: none; }
 
@@ -313,4 +315,25 @@ button { font-family: inherit; cursor: pointer; border: 0; color: inherit; }
   .joy { width: 120px; height: 120px; }
   .prompt { bottom: calc(24px + var(--safe-b)); }
   .stamina { bottom: calc(8px + var(--safe-b)); }
+}
+
+@media (max-width: 520px) {
+  .profile { width: 164px; padding: 8px 10px; border-radius: 16px; top: calc(8px + var(--safe-t)); right: calc(8px + var(--safe-r)); }
+  .profile .who .xp, .body-meter { display: none; }
+  .avatar { width: 36px; height: 36px; }
+  .who b { font-size: 14px; }
+  .chip { font-size: 10px; padding: 1px 6px; }
+  .bar { grid-template-columns: 14px 1fr 22px; font-size: 10px; gap: 4px; }
+  .bar .ic { font-size: 12px; }
+  .bar .track { height: 6px; }
+  .topleft { top: calc(8px + var(--safe-t)); left: calc(8px + var(--safe-l)); gap: 6px; max-width: calc(100vw - 190px); }
+  .pill { padding: 6px 10px; font-size: 12px; }
+  .pill.clock { min-width: 0; }
+  .pill .sub { display: none; }
+  .quests { top: calc(52px + var(--safe-t)); bottom: auto; left: calc(8px + var(--safe-l)); width: 170px; font-size: 11px; padding: 8px 10px; opacity: .92; }
+  .prompt { bottom: calc(128px + var(--safe-b)); font-size: 13px; max-width: 92vw; }
+  .stamina { bottom: calc(118px + var(--safe-b)); }
+  .toasts { top: calc(118px + var(--safe-t)); }
+  .toast { font-size: 13px; }
+  .mg-card { padding: 12px 14px; }
 }

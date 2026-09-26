@@ -16,6 +16,8 @@ export class CameraRig {
   private idleT = 0;
   private shake = 0;
   mode: CamMode = { kind: 'follow' };
+  /** Touch players can't easily steer the camera while moving, so it follows more eagerly. */
+  touch = false;
 
   constructor(readonly cam: THREE.PerspectiveCamera) {}
 
@@ -48,13 +50,13 @@ export class CameraRig {
         this.orbit(d, dt);
       } else {
         // Gently swing behind Yasmin while she moves and the player isn't steering the camera.
-        if (moving && this.idleT > 1.2) {
+        if (moving && this.idleT > (this.touch ? 0.4 : 1.2)) {
           let d = subjectYaw + Math.PI - this.yaw;
           d = Math.atan2(Math.sin(d), Math.cos(d));
-          this.yaw += d * Math.min(1, dt * 0.9);
+          this.yaw += d * Math.min(1, dt * (this.touch ? 2.2 : 0.9));
         }
         this.target.lerp(new THREE.Vector3(subject.x, subject.y + 1.3, subject.z), 1 - Math.exp(-dt * 12));
-        this.cam.fov = THREE.MathUtils.damp(this.cam.fov, 52, 4, dt);
+        this.cam.fov = THREE.MathUtils.damp(this.cam.fov, this.cam.aspect < 0.8 ? 64 : 52, 4, dt);
         this.orbit(this.dist, dt);
       }
     } else if (m.kind === 'focus' || m.kind === 'selfie') {

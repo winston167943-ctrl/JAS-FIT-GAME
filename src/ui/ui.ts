@@ -100,6 +100,7 @@ export class UI {
 
   private buildQuests(): void {
     this.questBox = el('div', 'quests');
+    if (matchMedia('(max-width: 520px)').matches) this.questBox.classList.add('collapsed');
     this.root.append(this.questBox);
   }
 
@@ -261,50 +262,83 @@ export class TouchControls {
   private actBtn: HTMLElement;
 
   constructor(host: HTMLElement, input: Input) {
-    const joy = el('div', 'joy', '<i></i>');
+    // Floating joystick: touch anywhere in the left zone and the stick appears under the thumb.
+    const zone = el('div', 'joy-zone');
+    const joy = el('div', 'joy idle', '<i></i>');
     this.knob = joy.firstChild as HTMLElement;
+    zone.append(joy);
     const btns = el('div', 'tbtns');
     this.actBtn = el('button', 'tbtn act', '✋');
-    const jump = el('button', 'tbtn jump', '⤒<small>קפיצה</small>');
-    const run = el('button', 'tbtn run', '🏃‍♀️<small>ריצה</small>');
+    const jump = el('button', 'tbtn jump', '⤒');
     this.carBtn = el('button', 'tbtn car hidden', '🚗');
-    btns.append(this.actBtn, jump, run, this.carBtn);
-    this.root.append(joy, btns);
+    btns.append(this.actBtn, jump, this.carBtn);
+    const hint = el('div', 'joy-hint', 'גררי כאן כדי ללכת · עד הקצה = ריצה');
+    zone.append(hint);
+    this.root.append(zone, btns);
     host.append(this.root);
 
     let id: number | null = null;
     let cx = 0, cy = 0;
-    const R = 50;
+    const R = 56;
     const move = (e: PointerEvent) => {
       let dx = e.clientX - cx, dy = e.clientY - cy;
       const d = Math.hypot(dx, dy);
-      if (d > R) { dx = (dx / d) * R; dy = (dy / d) * R; }
+      // Let the base follow the thumb when dragged far, so the stick never "runs out".
+      if (d > R * 1.4) { cx += (dx / d) * (d - R * 1.4); cy += (dy / d) * (d - R * 1.4); joy.style.left = `${cx}px`; joy.style.top = `${cy}px`; }
+      dx = e.clientX - cx; dy = e.clientY - cy;
+      const d2 = Math.hypot(dx, dy);
+      if (d2 > R) { dx = (dx / d2) * R; dy = (dy / d2) * R; }
       this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      input.joy.x = dx / R;
-      input.joy.y = -dy / R;
+      const k = Math.min(1, d2 / R);
+      const dead = k < 0.12 ? 0 : 1;
+      input.joy.x = (dx / R) * dead;
+      input.joy.y = (-dy / R) * dead;
+      input.touchSprint = k > 0.92;
+      joy.classList.toggle('sprint', input.touchSprint);
     };
-    joy.addEventListener('pointerdown', (e) => {
+    zone.addEventListener('pointerdown', (e) => {
+      if (id !== null) return;
+      e.preventDefault();
       id = e.pointerId;
-      const r = joy.getBoundingClientRect();
-      cx = r.left + r.width / 2; cy = r.top + r.height / 2;
-      joy.setPointerCapture(e.pointerId);
+      const r = zone.getBoundingClientRect();
+      cx = e.clientX - r.left; cy = e.clientY - r.top;
+      joy.style.left = `${cx}px`; joy.style.top = `${cy}px`;
+      cx = e.clientX; cy = e.clientY;
+      const rr = zone.getBoundingClientRect();
+      joy.style.left = `${cx - rr.left}px`; joy.style.top = `${cy - rr.top}px`;
+      joy.classList.remove('idle');
+      hint.style.opacity = '0';
+      zone.setPointerCapture(e.pointerId);
       move(e);
     });
-    joy.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+    zone.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id) return;
+      const rr = zone.getBoundingClientRect();
+      const ox = cx, oy = cy;
+      move(e);
+      if (cx !== ox || cy !== oy) { joy.style.left = `${cx - rr.left}px`; joy.style.top = `${cy - rr.top}px`; }
+    });
     const end = (e: PointerEvent) => {
       if (e.pointerId !== id) return;
       id = null;
       input.joy.x = 0; input.joy.y = 0;
+      input.touchSprint = false;
       this.knob.style.transform = '';
+      joy.classList.add('idle');
+      joy.classList.remove('sprint');
+      joy.style.left = ''; joy.style.top = '';
     };
-    joy.addEventListener('pointerup', end);
-    joy.addEventListener('pointercancel', end);
+    zone.addEventListener('pointerup', end);
+    zone.addEventListener('pointercancel', end);
 
-    const tap = (b: HTMLElement, fn: () => void) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+    const tap = (b: HTMLElement, fn: () => void) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); b.classList.add('down'); navigator.vibrate?.(8); fn(); });
+    for (const b of [this.actBtn, jump, this.carBtn]) {
+      const up = () => b.classList.remove('down');
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
+    }
     tap(this.actBtn, () => input.press('interact'));
     tap(jump, () => input.press('jump'));
     tap(this.carBtn, () => input.press('car'));
-    tap(run, () => { input.touchSprint = !input.touchSprint; run.classList.toggle('on', input.touchSprint); });
   }
 
   setCar(label: string | null): void {

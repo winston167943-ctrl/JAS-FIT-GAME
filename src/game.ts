@@ -100,6 +100,7 @@ export class Game {
     this.world = new World(this.scene, 4);
     this.player = new Player(this.scene);
     this.rig = new CameraRig(this.camera);
+    this.rig.touch = matchMedia('(pointer: coarse)').matches;
     this.car = new Car('#f7c9d4', true);
     this.car.pos.set(-16, 0, -2.4);
     this.car.yaw = Math.PI / 2;
