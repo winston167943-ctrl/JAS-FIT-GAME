@@ -16,6 +16,7 @@ import { CameraRig } from './player/camera';
 import { Car, Traffic } from './vehicles/car';
 import { Npc, NPCS } from './characters/npcs';
 import { ModelAvatar } from './characters/model';
+import { SpriteAvatar } from './characters/sprite';
 import { UI, TouchControls, el, type MenuItem } from './ui/ui';
 import { Phone, type Quality } from './phone/phone';
 import { GameState, OUTFITS, wipe, clamp } from './systems/state';
@@ -167,6 +168,10 @@ export class Game {
     this.rig.dist = 6.5;
 
     this.applyQuality(this.quality, true);
+    // Yasmin herself: the real renders from the brand video as a paper cut-out.
+    const sprite = new SpriteAvatar();
+    sprite.setCamera(this.camera);
+    this.player.setAvatar(sprite, this.scene);
     // If a real rigged model of Yasmin is present, swap it in for the procedural one.
     void ModelAvatar.load().then((m) => {
       if (!m) return;
@@ -317,6 +322,8 @@ export class Game {
     this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position);
     this.audio.night = this.sky.glow > 0.6;
     Car.setNight(this.sky.glow);
+    SpriteAvatar.tint.setRGB(1, 1, 1).lerp(new THREE.Color(0.42, 0.47, 0.72), this.sky.glow * 0.85);
+    SpriteAvatar.rim.copy(this.sky.sun.color).multiplyScalar((1 - this.sky.glow) * 0.25).add(new THREE.Color(0.35, 0.25, 0.12).multiplyScalar(this.sky.glow));
     this.scene.environmentIntensity = 0.03 + (1 - this.sky.glow) * 0.37;
     this.renderer.toneMappingExposure = 0.85 + this.sky.glow * 0.2;
     if (this.bloom) {
