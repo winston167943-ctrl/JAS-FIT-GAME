@@ -337,3 +337,11 @@ button { font-family: inherit; cursor: pointer; border: 0; color: inherit; }
   .toast { font-size: 13px; }
   .mg-card { padding: 12px 14px; }
 }
+
+.minimap { position: absolute; top: calc(66px + var(--safe-t)); left: calc(12px + var(--safe-l)); border-radius: 50%; box-shadow: 0 10px 26px rgba(43,26,23,.35); cursor: pointer; pointer-events: auto; }
+.quests { top: calc(228px + var(--safe-t)); }
+@media (max-width: 520px) {
+  .minimap { top: calc(50px + var(--safe-t)); left: calc(8px + var(--safe-l)); }
+  .quests { top: calc(172px + var(--safe-t)); }
+}
+@media (max-height: 520px) { .minimap { top: calc(56px + var(--safe-t)); } }

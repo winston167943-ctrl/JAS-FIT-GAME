@@ -823,7 +823,9 @@ export class World {
     sea.rotation.z = Math.PI;
     sea.position.set(SEA_X + 210, 0.08, 0);
     this.group.add(sea);
-    this.col.box(SEA_X + 58, 0, 110, 600);
+    // Open water: Yasmin can swim ~45m out before the buoy line.
+    this.col.box(SEA_X + 45 + 50, 0, 100, 600);
+    for (let z = -90; z <= 90; z += 6) this.sph(SEA_X + 45, 0.15, z, 0.35, z % 12 === 0 ? '#ff5e5b' : '#ffd166');
     // Boardwalk
     this.box(BEACH_X - 3.5, 0, 0, 3, 0.12, 120, '#c9955f', { bucket: 'ground' });
     for (let z = -58; z <= 58; z += 1) this.box(BEACH_X - 3.5, 0.12, z, 3, 0.01, 0.06, '#9c6c42', { bucket: 'ground' });
@@ -840,7 +842,6 @@ export class World {
       this.col.box(lx, lz, 2.2, 0.9);
     }
     this.spot('lounger', BEACH_X + 5, -18 + 1.3, { x: BEACH_X + 5, z: -18, face: -Math.PI / 2 });
-    this.spot('swim', SEA_X - 1.5, 6, { x: SEA_X + 3, z: 6, face: -Math.PI / 2 }, 2.4);
     // Lifeguard tower
     const lgx = BEACH_X + 6, lgz = 12;
     for (const [dx, dz] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) this.box(lgx + dx, 0, lgz + dz, 0.15, 2.2, 0.15, P.white);
@@ -911,9 +912,9 @@ export class World {
   }
 
   // ---------- runtime ----------
-  update(dt: number, glow: number, player: THREE.Vector3, cam: THREE.Vector3): void {
+  update(dt: number, glow: number, player: THREE.Vector3, cam: THREE.Vector3, skyColor?: THREE.Color): void {
     this.time += dt;
-    for (const w of this.waters) { w.uniforms.uTime.value = this.time; w.uniforms.uNight.value = glow; }
+    for (const w of this.waters) { w.uniforms.uTime.value = this.time; w.uniforms.uNight.value = glow; if (skyColor) w.uniforms.uSky.value.copy(skyColor); }
     this.glowMat.emissive.setScalar(0.08 + glow * 2.4);
     // Fountain particles
     const seeds = this.fountain.userData.seeds as number[][];

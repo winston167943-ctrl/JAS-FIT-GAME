@@ -50,12 +50,12 @@ export function makeWaterMaterial(opts: { deep: string; shallow: string; waves: 
         float fres = pow(1.0 - max(view.y, 0.0), 3.0);
         float n = noise(vWorld.xz * 0.6 + uTime * 0.25) * 0.6 + noise(vWorld.xz * 1.7 - uTime * 0.4) * 0.4;
         vec3 col = mix(uShallow, uDeep, smoothstep(0.2, 0.8, n));
-        col = mix(col, uSky, fres * 0.55);
+        col = mix(col, uSky, fres * 0.45);
         float caustic = smoothstep(0.62, 0.72, noise(vWorld.xz * 2.2 + vec2(uTime * 0.3, -uTime * 0.2)));
         col += caustic * 0.12 * (1.0 - uNight * 0.6);
         float sparkle = step(0.985, hash(floor(vWorld.xz * 6.0) + floor(uTime * 3.0))) * (1.0 - uNight * 0.7);
         col += sparkle * 0.6;
-        float foam = uFoam * smoothstep(0.93, 1.0, vUv.x + sin(vWorld.z * 0.4 + uTime * 1.5) * 0.02 + noise(vWorld.xz * 2.0 + uTime) * 0.03);
+        float foam = uFoam * smoothstep(0.984, 0.999, vUv.x + sin(vWorld.z * 0.4 + uTime * 1.5) * 0.004 + noise(vWorld.xz * 2.0 + uTime) * 0.006);
         col = mix(col, vec3(1.0), foam);
         col *= mix(1.0, 0.45, uNight);
         gl_FragColor = vec4(col, 0.9);

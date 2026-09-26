@@ -4,6 +4,7 @@ import type { Input } from '../core/input';
 import type { CollisionWorld } from '../core/collision';
 import type { GameState, Activity } from '../systems/state';
 import type { Audio } from '../core/audio';
+import { SEA_X } from '../world/layout';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -66,6 +67,8 @@ export class Player {
   private stepT = 0;
   private headPos = new THREE.Vector3();
   sweatBoost = 0;
+  /** True while Yasmin is out in the sea. */
+  swimming = false;
 
   constructor(scene: THREE.Scene) {
     scene.add(this.chibi.root);
@@ -111,7 +114,8 @@ export class Player {
       const mag = Math.min(1, dir.length());
       if (this.exhausted > 0) this.exhausted -= dt;
       const wantsRun = input.sprint() && st.stamina > 1 && this.exhausted <= 0 && mag > 0.2;
-      const walkSpeed = 3.3, runSpeed = 7.2;
+      this.swimming = this.pos.x > SEA_X + 2.2;
+      const walkSpeed = this.swimming ? 1.9 : 3.3, runSpeed = this.swimming ? 3.6 : 7.2;
       const target = mag * (wantsRun ? runSpeed : walkSpeed) * state.speedMul;
       this.speed = THREE.MathUtils.damp(this.speed, target, 8, dt);
       if (mag > 0.05) {
@@ -136,7 +140,7 @@ export class Player {
         st.stamina = Math.min(100, st.stamina + (this.speed < 0.5 ? 22 : 12) * dt * (1 - state.fatN * 0.4));
       }
       // Jump
-      if (input.consume('jump') && this.grounded) {
+      if (input.consume('jump') && this.grounded && !this.swimming) {
         this.vy = 5.2 * (1 - state.fatN * 0.4);
         this.grounded = false;
         audio.play('whoosh');
@@ -149,14 +153,15 @@ export class Player {
 
       const running = wantsRun && this.speed > 4;
       let pose: Pose = 'idle';
-      if (!this.grounded) pose = 'jump';
+      if (this.swimming) pose = 'swim';
+      else if (!this.grounded) pose = 'jump';
       else if (this.speed > 4.2) pose = 'run';
       else if (this.speed > 0.3) pose = 'walk';
       else if (this.exhausted > 0) pose = 'tired';
       c.pose = pose;
-      this.activity = running ? 'run' : this.speed > 0.3 ? 'walk' : 'idle';
+      this.activity = this.swimming ? 'swim' : running ? 'run' : this.speed > 0.3 ? 'walk' : 'idle';
       // Footsteps
-      if (this.grounded && this.speed > 0.5) {
+      if (this.grounded && this.speed > 0.5 && !this.swimming) {
         this.stepT -= dt * this.speed * (running ? 0.42 : 0.6);
         if (this.stepT <= 0) { this.stepT = 1; audio.play('step'); }
       }

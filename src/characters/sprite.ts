@@ -22,9 +22,11 @@ const SHEETS: Record<'idle' | 'wave' | 'drink', { url: string; n: number; cols: 
 const vert = /* glsl */ `
   uniform float uFat, uTone, uWidth;
   varying vec2 vUv;
+  varying float vWorldY;
   #include <fog_pars_vertex>
   void main() {
     vUv = uv;
+    vWorldY = (modelMatrix * vec4(position, 1.0)).y;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -35,9 +37,12 @@ const frag = /* glsl */ `
   uniform vec4 uFrame;      // offset.xy, size.xy in the atlas
   uniform float uFat, uTone, uWidth, uFlip, uTime, uFlash;
   uniform vec3 uTint, uRim;
+  uniform float uClipY;
   varying vec2 vUv;
+  varying float vWorldY;
   #include <fog_pars_fragment>
   void main() {
+    if (vWorldY < uClipY) discard;
     vec2 uv = vUv;
     if (uFlip > 0.5) uv.x = 1.0 - uv.x;
     // The quad is wider than the art by uWidth; map back to art space.
@@ -104,7 +109,7 @@ export class SpriteAvatar implements Avatar {
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         uMap: { value: null }, uFrame: { value: new THREE.Vector4(0, 0, 1, 1) },
         uFat: { value: 0 }, uTone: { value: 0 }, uWidth: { value: 1.6 }, uFlip: { value: 0 }, uTime: { value: 0 },
-        uFlash: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) }, uRim: { value: new THREE.Color(0, 0, 0) },
+        uFlash: { value: 0 }, uClipY: { value: -99 }, uTint: { value: new THREE.Color(1, 1, 1) }, uRim: { value: new THREE.Color(0, 0, 0) },
       }]),
       vertexShader: vert,
       fragmentShader: frag,
@@ -156,6 +161,7 @@ export class SpriteAvatar implements Avatar {
     u.uRim.value.copy(SpriteAvatar.rim);
     this.flash = Math.max(0, this.flash - dt * 3);
     u.uFlash.value = this.flash * 0.25;
+    u.uClipY.value = this.pose === 'swim' ? 0.12 : -99;
 
     // Paper Mario style motion: bounce, squash & stretch, lean.
     const h = sh.height;
@@ -180,7 +186,9 @@ export class SpriteAvatar implements Avatar {
     } else if (this.pose === 'sleep' || this.pose === 'lounge') {
       lie = 1; lift = 0.55;
     } else if (this.pose === 'swim') {
-      lift = -0.9; bob = Math.sin(this.t * 3) * 0.05;
+      const st = this.t * (speed > 2.5 ? 5 : 3.2);
+      lift = -1.05; bob = Math.sin(st) * 0.07; lean = Math.sin(st * 0.5) * 0.14;
+      sx = 1 + Math.sin(st) * 0.03; sy = 1 / sx;
     } else if (this.pose === 'dance') {
       bob = Math.abs(Math.sin(this.t * 7)) * 0.1; lean = Math.sin(this.t * 3.5) * 0.14;
     } else {

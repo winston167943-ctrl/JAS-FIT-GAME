@@ -17,6 +17,8 @@ import { Car, Traffic } from './vehicles/car';
 import { Npc, NPCS } from './characters/npcs';
 import { ModelAvatar } from './characters/model';
 import { SpriteAvatar } from './characters/sprite';
+import { Spectacle } from './world/spectacle';
+import { MiniMap } from './ui/minimap';
 import { UI, TouchControls, el, type MenuItem } from './ui/ui';
 import { Phone, type Quality } from './phone/phone';
 import { GameState, OUTFITS, wipe, clamp } from './systems/state';
@@ -58,6 +60,10 @@ export class Game {
   private touch: TouchControls | null = null;
   private phone: Phone;
   private fx: Sparkles;
+  private spectacle: Spectacle;
+  private minimap!: MiniMap;
+  private splashT = 0;
+  private wasSwimming = false;
   private mode: Mode = 'intro';
   private mg: MiniGame | null = null;
   private track: TrackRun | null = null;
@@ -108,10 +114,13 @@ export class Game {
     this.traffic = new Traffic(this.scene);
     for (const d of NPCS) this.npcs.push(new Npc(d, this.scene));
     this.fx = new Sparkles(this.scene);
+    this.spectacle = new Spectacle(this.scene);
 
     this.ui = new UI(host);
     if (this.input.isTouch) this.touch = new TouchControls(host, this.input);
     this.ui.onPrompt = () => this.input.press('interact');
+    this.minimap = new MiniMap(this.ui.root);
+    this.minimap.onClick = () => { if (this.mode === 'explore' && !this.ui.modalOpen) { this.input.enabled = false; this.phone.show('map'); } };
     this.ui.onPhone = () => this.togglePhone();
     this.ui.onBody = () => this.phone.show('body');
     this.phone = new Phone(host, {
@@ -320,7 +329,7 @@ export class Game {
     const hour = this.state.hour;
     const focus = this.mode === 'drive' ? this.car.pos : this.player.pos;
     this.sky.update(hour, dt, focus, this.camera.position);
-    this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position);
+    this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position, this.sky.horizon);
     this.audio.night = this.sky.glow > 0.6;
     Car.setNight(this.sky.glow);
     SpriteAvatar.tint.setRGB(1, 1, 1).lerp(new THREE.Color(0.42, 0.47, 0.72), this.sky.glow * 0.85);
@@ -336,6 +345,10 @@ export class Game {
     this.traffic.update(dt, blockers);
     for (const n of this.npcs) n.update(dt, this.player.pos, this.elapsed);
     this.fx.update(dt);
+    this.spectacle.update(dt, this.sky.glow, hour, this.player.pos, this.camera);
+    const mp = this.mode === 'drive' ? this.car.pos : this.player.pos;
+    this.minimap.update(dt, mp.x, mp.z, this.mode === 'drive' ? this.car.yaw : this.player.yaw, this.rig.yaw, this.sky.glow);
+    this.updateSwim(dt);
 
     // Camera
     const look = this.input.takeLook();
@@ -902,6 +915,28 @@ export class Game {
       a.append(share, dl, x);
       box.append(a);
     });
+  }
+
+  private updateSwim(dt: number): void {
+    const sw = this.player.swimming && this.mode !== 'drive';
+    if (sw && !this.wasSwimming) {
+      this.audio.play('whoosh');
+      this.fx.burst(this.player.pos.clone().setY(-0.6), ['#b8d8e8', '#7fb6d6'], 30, 1.2);
+      this.ui.toast('🌊 יסמין שוחה! שחייה שורפת שומן ובונה סבולת · Shift / עד הקצה = קרול מהיר', 'good');
+    }
+    if (!sw && this.wasSwimming) this.fx.burst(this.player.pos.clone().setY(-0.6), ['#b8d8e8'], 14);
+    this.wasSwimming = sw;
+    if (!sw) return;
+    this.splashT -= dt;
+    if (this.splashT <= 0) {
+      const moving = this.player.speed > 0.4;
+      this.splashT = moving ? (this.player.speed > 2.5 ? 0.18 : 0.3) : 0.9;
+      this.spectacle.ripple(this.player.pos.x, this.player.pos.z);
+      if (moving) {
+        this.fx.burst(this.player.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, -0.75, (Math.random() - 0.5) * 0.8)), ['#9fb8c8', '#7a99ad'], 5, 0.5);
+        if (Math.random() < 0.3) this.audio.play('drink');
+      }
+    }
   }
 
   // ---------------- bubbles & hints ----------------

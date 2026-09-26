@@ -6,9 +6,11 @@ export class Sparkles {
   private parts: { p: THREE.Vector3; v: THREE.Vector3; life: number; max: number }[] = [];
   private pos: Float32Array;
   private col: Float32Array;
-  private N = 240;
+  private N: number;
+  gravity = 2.5;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, size = 0.28, count = 240) {
+    this.N = count;
     this.pos = new Float32Array(this.N * 3);
     this.col = new Float32Array(this.N * 3);
     const g = new THREE.BufferGeometry();
@@ -22,7 +24,7 @@ export class Sparkles {
       x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
       return new THREE.CanvasTexture(c);
     })();
-    this.points = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.28, map: tex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.points = new THREE.Points(g, new THREE.PointsMaterial({ size, map: tex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.points.frustumCulled = false;
     scene.add(this.points);
   }
@@ -47,7 +49,7 @@ export class Sparkles {
       const p = this.parts[i];
       p.life -= dt;
       if (p.life <= 0) { this.parts.splice(i, 1); continue; }
-      p.v.y -= 2.5 * dt;
+      p.v.y -= this.gravity * dt;
       p.v.multiplyScalar(1 - dt * 1.5);
       p.p.addScaledVector(p.v, dt);
     }

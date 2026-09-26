@@ -27,12 +27,16 @@ function lerpColor(a: string, b: string, k: number, out: THREE.Color): THREE.Col
 export class Sky {
   readonly mesh: THREE.Mesh;
   readonly stars: THREE.Points;
+  private starMat!: THREE.ShaderMaterial;
+  private t = 0;
   readonly clouds = new THREE.Group();
   readonly sun: THREE.DirectionalLight;
   readonly hemi: THREE.HemisphereLight;
   private uniforms: Record<string, THREE.IUniform>;
   /** 0 by day, 1 at full night — drives windows, street lamps and bloom. */
   glow = 0;
+  /** Current horizon color (reflected by water). */
+  get horizon(): THREE.Color { return this.uniforms.horizon.value as THREE.Color; }
   private sunDir = new THREE.Vector3();
   private fogColor = new THREE.Color();
 
@@ -44,6 +48,8 @@ export class Sky {
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
       sunColor: { value: new THREE.Color() },
       moonDir: { value: new THREE.Vector3(0, -1, 0) },
+      uNight: { value: 0 },
+      uTime: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -59,6 +65,11 @@ export class Sky {
         }`,
       fragmentShader: /* glsl */ `
         uniform vec3 top, horizon, bottom, sunColor, sunDir, moonDir;
+        uniform float uNight, uTime;
+        float hsh(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }
+        float vn(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+          return mix(mix(mix(hsh(i),hsh(i+vec3(1,0,0)),f.x),mix(hsh(i+vec3(0,1,0)),hsh(i+vec3(1,1,0)),f.x),f.y),
+                     mix(mix(hsh(i+vec3(0,0,1)),hsh(i+vec3(1,0,1)),f.x),mix(hsh(i+vec3(0,1,1)),hsh(i+vec3(1,1,1)),f.x),f.y),f.z); }
         varying vec3 vDir;
         void main() {
           vec3 d = normalize(vDir);
@@ -67,7 +78,13 @@ export class Sky {
           float s = max(dot(d, normalize(sunDir)), 0.0);
           col += sunColor * (pow(s, 900.0) * 6.0 + pow(s, 12.0) * 0.35 + pow(s, 3.0) * 0.08) * step(-0.05, sunDir.y);
           float m = max(dot(d, normalize(moonDir)), 0.0);
-          col += vec3(0.85, 0.9, 1.0) * (smoothstep(0.9993, 0.9996, m) * 1.4 + pow(m, 40.0) * 0.12) * step(0.0, moonDir.y);
+          col += vec3(0.95, 0.95, 1.0) * (smoothstep(0.9985, 0.999, m) * 1.8 + pow(m, 60.0) * 0.25 + pow(m, 8.0) * 0.05) * step(0.0, moonDir.y);
+          // Milky way: a noisy glowing band across the night sky
+          vec3 axis = normalize(vec3(0.3, 0.15, 1.0));
+          float band = exp(-pow(dot(d, axis) / 0.22, 2.0));
+          float cloud = vn(d * 6.0) * 0.6 + vn(d * 14.0) * 0.4;
+          float dust = smoothstep(0.55, 0.75, vn(d * 9.0 + 3.0));
+          col += mix(vec3(0.35, 0.3, 0.6), vec3(0.95, 0.7, 0.9), cloud) * band * cloud * (1.0 - dust * 0.7) * 0.5 * uNight * smoothstep(-0.05, 0.3, h);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -79,7 +96,7 @@ export class Sky {
     scene.add(this.mesh);
 
     // Stars
-    const n = 900;
+    const n = 2200;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const u = Math.random(), v = Math.random() * 0.9 + 0.08;
@@ -90,7 +107,16 @@ export class Sky {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    const seeds = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) { seeds[i * 2] = Math.random() * 6.28; seeds[i * 2 + 1] = Math.pow(Math.random(), 3) * 3 + 1; }
+    sg.setAttribute('seed', new THREE.BufferAttribute(seeds, 2));
+    this.starMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 } },
+      vertexShader: 'attribute vec2 seed; uniform float uTime; varying float vTw; varying float vHue; void main(){ vTw = 0.55 + 0.45 * sin(uTime * (1.5 + seed.y) + seed.x); vHue = fract(seed.x * 3.7); vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = seed.y * 1.6 * (0.7 + vTw * 0.5); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'uniform float uOpacity; varying float vTw; varying float vHue; void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.0, d); a += smoothstep(0.06, 0.0, abs(c.x)) * smoothstep(0.5, 0.0, abs(c.y)) * 0.5 + smoothstep(0.06, 0.0, abs(c.y)) * smoothstep(0.5, 0.0, abs(c.x)) * 0.5; vec3 col = mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.85, 0.7), vHue); gl_FragColor = vec4(col * a * vTw * uOpacity, a * uOpacity); }',
+    });
+    this.stars = new THREE.Points(sg, this.starMat);
     this.stars.frustumCulled = false;
     scene.add(this.stars);
 
@@ -163,7 +189,11 @@ export class Sky {
     this.hemi.color.copy(this.uniforms.top.value).lerp(new THREE.Color(0xffffff), 0.55);
     this.hemi.groundColor.set(0x5d4a3a).lerp(this.fogColor, 0.3);
 
-    (this.stars.material as THREE.PointsMaterial).opacity = this.glow * 0.95;
+    this.t += dt;
+    this.starMat.uniforms.uOpacity.value = this.glow;
+    this.starMat.uniforms.uTime.value = this.t;
+    this.uniforms.uNight.value = this.glow;
+    this.uniforms.uTime.value = this.t;
     this.mesh.position.copy(camPos);
     this.stars.position.copy(camPos);
     this.stars.rotation.y += dt * 0.004;
