@@ -981,6 +981,13 @@ export class World {
     for (const l of this.lights) l.intensity = glow * 22;
   }
 
+  /** The active street-lamp light closest to `p` (for lighting the cut-out avatar). */
+  nearestLamp(p: THREE.Vector3): THREE.PointLight | null {
+    let best: THREE.PointLight | null = null, bd = Infinity;
+    for (const l of this.lights) { const d = l.position.distanceToSquared(p); if (l.visible && d < bd) { bd = d; best = l; } }
+    return best;
+  }
+
   nearestSpot(p: THREE.Vector3): Spot | null {
     let best: Spot | null = null, bd = Infinity;
     for (const s of this.spots) {

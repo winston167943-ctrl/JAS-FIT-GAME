@@ -361,8 +361,18 @@ export class Game {
     this.world.update(dt, this.sky.glow, this.player.pos, this.camera.position, this.sky.horizon);
     this.audio.night = this.sky.glow > 0.6;
     Car.setNight(this.sky.glow);
-    SpriteAvatar.tint.setRGB(1, 1, 1).lerp(new THREE.Color(0.42, 0.47, 0.72), this.sky.glow * 0.85);
-    SpriteAvatar.rim.copy(this.sky.sun.color).multiplyScalar((1 - this.sky.glow) * 0.25).add(new THREE.Color(0.35, 0.25, 0.12).multiplyScalar(this.sky.glow));
+    {
+      const L = SpriteAvatar.light;
+      L.sunDir.copy(this.sky.sun.position).sub(this.sky.sun.target.position).normalize();
+      L.sunCol.copy(this.sky.sun.color).multiplyScalar(this.sky.sun.intensity);
+      L.sky.copy(this.sky.hemi.color).multiplyScalar(this.sky.hemi.intensity * 3.2 + this.scene.environmentIntensity * 2.2);
+      L.ground.copy(this.sky.hemi.groundColor).multiplyScalar(this.sky.hemi.intensity * 3.2 + this.scene.environmentIntensity * 1.2);
+      // Indoors (inside the house / gym) the ceiling blocks the sky: soften direct sun.
+      const lamp = this.world.nearestLamp(this.player.pos);
+      if (lamp && lamp.intensity > 0.1) { L.lampPos.copy(lamp.position); L.lampCol.copy(lamp.color).multiplyScalar(lamp.intensity * 0.12); }
+      else L.lampCol.setRGB(0, 0, 0);
+      SpriteAvatar.rim.copy(this.sky.sun.color).multiplyScalar((1 - this.sky.glow) * 0.18).add(new THREE.Color(0.3, 0.22, 0.1).multiplyScalar(this.sky.glow * 0.6));
+    }
     this.scene.environmentIntensity = 0.03 + (1 - this.sky.glow) * 0.37;
     this.renderer.toneMappingExposure = 0.85 + this.sky.glow * 0.2;
     if (this.bloom) {
